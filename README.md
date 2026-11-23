@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Caderneta do Bar (Next.js + PostgreSQL)
 
-## Getting Started
+Sistema de **fiado** para bar, portado da versão PHP/CodeIgniter (`C:\Bar_will`):
 
-First, run the development server:
+- **Clientes e contas**: anota o que cada cliente consumiu, recebe pagamentos (parciais ou totais) e mostra quem está devendo.
+- **Vendas à vista**: registra o que foi pago na hora, com cancelamento.
+- **Produtos e categorias**: cardápio com preços; mudar um preço não altera o que já foi lançado.
+- **Relatórios**: caixa e vendas por dia, semana, mês, ano ou período, com exportação CSV.
+
+Nada financeiro é apagado: pagamento errado é **estornado** e venda à vista é **cancelada**, com data e motivo.
+
+## Rodar
+
+Requisitos: Node 22+ e Docker Desktop (ou outro PostgreSQL 14+).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # no Windows: copy .env.example .env.local
+npm run db:up                # sobe o Postgres do docker-compose.yml
+npm run db:migrate           # cria as tabelas (pode rodar de novo sem problema)
+npm run db:seed              # opcional: dados de exemplo (só com o banco vazio)
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Produção: `npm run build` e `npm start`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Organização
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Onde | O quê |
+|---|---|
+| `app/` | telas (`page.tsx`) e a exportação CSV (`relatorios/exportar/route.ts`) |
+| `lib/acoes.ts` | Server Actions chamadas pelos formulários (validação + aviso) |
+| `lib/servicos.ts` | regras de negócio com transação (venda, pagamento, estorno, cancelamento) |
+| `lib/dados.ts` | consultas das telas e do relatório |
+| `lib/db.ts` | conexão (`pg`), transações e proteção contra envio duplicado |
+| `lib/config.ts` | formas de pagamento, cores, limites |
+| `components/` | ícones, modais, avisos e formulários |
+| `db/schema.sql` | esquema do banco |
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Datas são gravadas como `timestamptz` e sempre exibidas/agrupadas no fuso `America/Sao_Paulo`.
+O nome no topo vem de `BAR_NOME` no `.env.local`.
