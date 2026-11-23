@@ -32,6 +32,29 @@ pode definir uma senha nova para quem esqueceu.
 
 A cada `git push` para o GitHub, a Vercel publica a versão nova sozinha.
 
+## Trazer os dados da Caderneta antiga (PHP/MySQL)
+
+1. **No computador onde roda a versão PHP**, gere o backup (com o MySQL ligado):
+
+   ```bat
+   C:\xampp\mysql\bin\mysqldump -u root bar_will > C:\caderneta-backup.sql
+   ```
+
+   (Se a versão PHP roda no Docker: `docker compose exec -T db mysqldump -u root -p bar_will > C:\caderneta-backup.sql`, na pasta dela.)
+2. Leve o `caderneta-backup.sql` para o computador de desenvolvimento (pen drive, por exemplo).
+3. Crie na pasta do projeto um arquivo `.env.neon` com uma linha `DATABASE_URL=...`, copiando o endereço
+   do banco no Neon (Vercel → Storage → o banco → **Show secret** / **Copy Snippet**). Ele fica fora do git.
+4. Rode (precisa de Docker e Node):
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File windows\importar-backup-php.ps1 -Backup C:\caderneta-backup.sql
+   ```
+
+Categorias, produtos, clientes, vendas, itens e pagamentos são copiados com os mesmos números, horários,
+cancelamentos e estornos; o saldo de cada cliente é recalculado e conferido com o do banco antigo.
+Se o banco novo já tiver produtos ou clientes, nada é feito; acrescente `-Substituir` para apagar esses
+dados e importar por cima (usuários e senhas ficam).
+
 ## Rodar com Docker (recomendado)
 
 Só precisa do Docker Desktop. Na pasta do projeto:
