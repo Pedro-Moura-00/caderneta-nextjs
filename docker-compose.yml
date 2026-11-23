@@ -29,7 +29,6 @@ services:
 
   app:
     build: .
-    image: caderneta-bar
     restart: unless-stopped
     depends_on:
       db:

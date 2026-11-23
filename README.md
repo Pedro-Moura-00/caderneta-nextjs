@@ -18,13 +18,52 @@ docker compose up -d --build
 ```
 
 Abre em <http://localhost:8080>. O banco é criado/atualizado sozinho ao ligar.
-Para começar com dados de exemplo, troque `BAR_SEED: "0"` por `"1"` no `docker-compose.yml`
-antes de subir pela primeira vez. Para desligar: `docker compose down` (os dados ficam no volume `pg_data`).
+Para desligar: `docker compose down` (os dados ficam no volume `pg_data`).
 
-Backup do banco:
+Ajustes da máquina ficam num arquivo `.env` na pasta do projeto (fora do git), por exemplo:
 
-```bash
-docker compose exec db pg_dump -U bar_will bar_will > backup.sql
+```ini
+BAR_NOME=Bar do Will
+PORTA=8080
+BAR_SEED=1
+```
+
+`BAR_SEED=1` cria dados de exemplo na primeira vez (só com o banco vazio).
+
+## Notebook do bar: instalar uma vez e receber atualizações
+
+As atualizações saem do computador de desenvolvimento pelo GitHub: lá você faz o commit e roda `git push`;
+o notebook confere o GitHub a cada 15 minutos e, se houver versão nova, faz backup do banco,
+baixa o código e reconstrói o container. Os dados nunca são apagados.
+
+No notebook (uma vez só):
+
+1. Instale o **Docker Desktop** (em Settings → General, marque *Start Docker Desktop when you sign in*)
+   e o **Git** (<https://git-scm.com/download/win>).
+2. No Prompt de Comando:
+
+   ```bat
+   cd C:\
+   git clone https://github.com/SEU-USUARIO/SEU-REPOSITORIO.git caderneta
+   cd C:\caderneta
+   docker compose up -d --build
+   ```
+
+   O repositório é privado: no `git clone`, o Git abre o navegador para entrar na conta do GitHub.
+3. Clique duas vezes em `windows\ativar-atualizacao-automatica.bat`.
+
+Daí em diante:
+
+- `windows\atualizar-caderneta.bat` atualiza na hora, sem esperar os 15 minutos.
+- `windows\desativar-atualizacao-automatica.bat` desliga a atualização automática.
+- O registro fica em `logs\atualizacao.log` e os backups (os 30 mais recentes) em `backups\`.
+- Outros aparelhos na mesma rede abrem `http://IP-DO-NOTEBOOK:8080`.
+
+Backup manual do banco:
+
+```bat
+docker compose exec -T db pg_dump -U bar_will -f /tmp/backup.sql bar_will
+docker compose cp db:/tmp/backup.sql backup.sql
 ```
 
 ## Rodar para desenvolver
