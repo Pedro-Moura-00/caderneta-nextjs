@@ -128,6 +128,30 @@ export async function reativarCliente(clienteId: number): Promise<Resultado> {
     });
 }
 
+/**
+ * Exclui um cliente que nunca teve lançamento (ex.: cadastrado em dobro).
+ * Com qualquer venda ou pagamento (mesmo cancelado/estornado), só dá para arquivar.
+ */
+export async function excluirCliente(clienteId: number): Promise<Resultado> {
+    if (!(await usuarioAtual())) return SEM_SESSAO;
+    return executar(() =>
+        transacao(async (db) => {
+            const c = await db.query<{ nome: string }>(
+                "SELECT TRIM(nome || ' ' || sobrenome) AS nome FROM clientes WHERE id = $1 FOR UPDATE",
+                [id(clienteId)],
+            );
+            if (c.rowCount === 0) return falha('Cliente não encontrado', '/');
+            const usado = await db.query(
+                'SELECT 1 FROM vendas WHERE cliente_id = $1 UNION ALL SELECT 1 FROM pagamentos WHERE cliente_id = $1 LIMIT 1',
+                [id(clienteId)],
+            );
+            if (usado.rowCount) return falha('Esse cliente já tem lançamentos e não pode ser excluído. Use "Arquivar cliente".');
+            await db.query('DELETE FROM clientes WHERE id = $1', [id(clienteId)]);
+            return sucesso(`${c.rows[0].nome} foi excluído`, '/', 'amber');
+        }),
+    );
+}
+
 /* ── Vendas e itens ────────────────────────────────────────── */
 
 /** Lança consumo na conta do cliente. */

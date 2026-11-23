@@ -6,7 +6,7 @@ import { Suspense } from 'react';
 import { Icone } from '@/components/Icone';
 import { BotaoAcao, BotaoConfirmar } from '@/components/interativos';
 import { CabecalhoPagina, EstadoVazio, Pagina } from '@/components/ui';
-import { arquivarCliente, reativarCliente } from '@/lib/acoes';
+import { arquivarCliente, excluirCliente, reativarCliente } from '@/lib/acoes';
 import { HISTORICO_POR_PAGINA } from '@/lib/config';
 import { exigirUsuario, usuarioAtual } from '@/lib/auth';
 import * as dados from '@/lib/dados';
@@ -145,15 +145,27 @@ async function Conteudo({ params, searchParams }: PageProps<'/clientes/[id]'>) {
                 </>
             )}
 
-            {!arquivado && !deve && !credito ? (
-                <div className="mt-8 text-center">
-                    <BotaoConfirmar
-                        pergunta={`Arquivar ${nome}? Ele sai da lista, mas o histórico fica guardado.`}
-                        acao={arquivarCliente.bind(null, cliente.id)}
-                        className="toque inline-flex items-center gap-2 text-sm font-bold text-suave"
-                    >
-                        <Icone nome="archive" tamanho={16} /> Arquivar cliente
-                    </BotaoConfirmar>
+            {(!arquivado && !deve && !credito) || hist.total === 0 ? (
+                <div className="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+                    {!arquivado && !deve && !credito ? (
+                        <BotaoConfirmar
+                            pergunta={`Arquivar ${nome}? Ele sai da lista, mas o histórico fica guardado.`}
+                            acao={arquivarCliente.bind(null, cliente.id)}
+                            className="toque inline-flex items-center gap-2 text-sm font-bold text-suave"
+                        >
+                            <Icone nome="archive" tamanho={16} /> Arquivar cliente
+                        </BotaoConfirmar>
+                    ) : null}
+                    {/* só para quem nunca teve lançamento (ex.: cadastro em dobro); o servidor confere */}
+                    {hist.total === 0 ? (
+                        <BotaoConfirmar
+                            pergunta={`Excluir ${nome} de vez? O cadastro será apagado e isso não pode ser desfeito.`}
+                            acao={excluirCliente.bind(null, cliente.id)}
+                            className="toque inline-flex items-center gap-2 text-sm font-bold text-vermelho"
+                        >
+                            <Icone nome="trash-2" tamanho={16} /> Excluir cliente
+                        </BotaoConfirmar>
+                    ) : null}
                 </div>
             ) : null}
         </>
