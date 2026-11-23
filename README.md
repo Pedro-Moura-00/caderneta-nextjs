@@ -44,12 +44,12 @@ No notebook (uma vez só):
 
    ```bat
    cd C:\
-   git clone https://github.com/SEU-USUARIO/SEU-REPOSITORIO.git caderneta
+   git clone https://github.com/Pedro-Moura-00/caderneta-nextjs.git caderneta
    cd C:\caderneta
    docker compose up -d --build
    ```
 
-   O repositório é privado: no `git clone`, o Git abre o navegador para entrar na conta do GitHub.
+   O repositório é público: não precisa entrar na conta do GitHub no notebook.
 3. Clique duas vezes em `windows\ativar-atualizacao-automatica.bat`.
 
 Daí em diante:
