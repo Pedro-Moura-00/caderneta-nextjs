@@ -1,12 +1,37 @@
 'use client';
 
 import { Icone } from '@/components/Icone';
-import { useAcao } from '@/components/interativos';
+import { useAviso } from '@/components/interativos';
+import type { Resultado } from '@/lib/acoes';
 import { Campo } from '@/components/ui';
 import { criarPrimeiroAdmin, entrar } from '@/lib/acoes-conta';
+import { useTransition } from 'react';
+
+/**
+ * Como useAcao, mas ao entrar recarrega a página inteira: assim o formulário com a senha
+ * digitada não fica guardado escondido no navegador (o Next guarda as telas visitadas).
+ */
+function useEntrada() {
+    const avisar = useAviso();
+    const [pendente, iniciar] = useTransition();
+    const executar = (acao: () => Promise<Resultado>) =>
+        iniciar(async () => {
+            try {
+                const r = await acao();
+                if (r.ok && r.destino) {
+                    window.location.replace(r.destino);
+                    return;
+                }
+                avisar(r.msg, r.cor);
+            } catch {
+                avisar('Não deu certo. Tente de novo.', 'red');
+            }
+        });
+    return [executar, pendente] as const;
+}
 
 export function FormEntrar({ de }: { de: string }) {
-    const [executar, pendente] = useAcao();
+    const [executar, pendente] = useEntrada();
     return (
         <form
             className="cartao p-5"
@@ -28,7 +53,7 @@ export function FormEntrar({ de }: { de: string }) {
 
 /** Primeiro acesso: ainda não há usuários. */
 export function FormPrimeiroAdmin() {
-    const [executar, pendente] = useAcao();
+    const [executar, pendente] = useEntrada();
     return (
         <form
             className="cartao p-5"

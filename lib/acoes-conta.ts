@@ -140,6 +140,38 @@ export async function alterarUsuario(usuarioId: number, fd: FormData): Promise<R
     });
 }
 
+/**
+ * Exclui um usuário que nunca lançou nada (ex.: cadastrado em dobro ou por engano).
+ * Quem já tem lançamentos não pode ser excluído (o histórico perderia o nome): tire o acesso.
+ */
+export async function excluirUsuario(usuarioId: number): Promise<Resultado> {
+    return comAdmin(async (eu) => {
+        if (usuarioId === eu.id) return falha('Você não pode excluir o próprio usuário.');
+        return transacao(async (db) => {
+            await db.query('LOCK TABLE usuarios IN EXCLUSIVE MODE');
+            const u = await db.query<{ nome: string }>('SELECT nome FROM usuarios WHERE id = $1', [usuarioId]);
+            if (u.rowCount === 0) return falha('Usuário não encontrado.');
+            const usado = await db.query(
+                `SELECT 1 FROM vendas WHERE usuario_id = $1 OR cancelada_por = $1
+                 UNION ALL
+                 SELECT 1 FROM pagamentos WHERE usuario_id = $1 OR estornado_por = $1
+                 LIMIT 1`,
+                [usuarioId],
+            );
+            if (usado.rowCount) {
+                return falha(`${u.rows[0].nome} já fez lançamentos e não pode ser excluído. Tire o acesso em vez disso.`);
+            }
+            await db.query('DELETE FROM usuarios WHERE id = $1', [usuarioId]);
+            const admins = await db.query('SELECT 1 FROM usuarios WHERE admin AND ativo LIMIT 1');
+            if (admins.rowCount === 0) throw new Error('sem administrador');
+            return sucesso(`${u.rows[0].nome} foi excluído`);
+        }).catch((e: Error) => {
+            if (e.message === 'sem administrador') return falha('Precisa ficar pelo menos um administrador ativo.');
+            throw e;
+        });
+    });
+}
+
 /** Administrador define uma senha nova para alguém (que perdeu a dele). */
 export async function redefinirSenha(usuarioId: number, fd: FormData): Promise<Resultado> {
     return comAdmin(async () => {

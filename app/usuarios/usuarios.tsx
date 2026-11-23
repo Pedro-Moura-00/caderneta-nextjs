@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Icone } from '@/components/Icone';
 import { Modal, useAcao, useModal } from '@/components/interativos';
 import { Campo } from '@/components/ui';
-import { alterarUsuario, criarUsuario, redefinirSenha, trocarMinhaSenha } from '@/lib/acoes-conta';
+import { alterarUsuario, criarUsuario, excluirUsuario, redefinirSenha, trocarMinhaSenha } from '@/lib/acoes-conta';
 
 export type LinhaUsuario = { id: number; nome: string; login: string; admin: boolean; ativo: boolean; bloqueado: boolean };
 
@@ -32,12 +32,14 @@ function FormModal({
     aoFechar,
     acao,
     botao,
+    rodape,
     children,
 }: {
     titulo: string;
     aoFechar: () => void;
     acao: (fd: FormData) => Promise<import('@/lib/acoes').Resultado>;
     botao: string;
+    rodape?: React.ReactNode;
     children: React.ReactNode;
 }) {
     const [executar, pendente] = useAcao();
@@ -55,8 +57,28 @@ function FormModal({
                 <button type="submit" disabled={pendente} aria-busy={pendente || undefined} className="btn btn-g btn-verde w-full">
                     <Icone nome="check" tamanho={24} /> {botao}
                 </button>
+                {rodape}
             </form>
         </Modal>
+    );
+}
+
+/** Exclui de vez (só quem nunca lançou nada; o servidor confere). */
+function BotaoExcluir({ usuario, aoExcluir }: { usuario: LinhaUsuario; aoExcluir: () => void }) {
+    const [executar, pendente] = useAcao();
+    return (
+        <button
+            type="button"
+            disabled={pendente}
+            aria-busy={pendente || undefined}
+            className="btn btn-contorno-vermelho mt-3 h-[50px] w-full"
+            onClick={() =>
+                window.confirm(`Excluir ${usuario.nome} (${usuario.login})? Isso não pode ser desfeito.`) &&
+                executar(() => excluirUsuario(usuario.id), aoExcluir)
+            }
+        >
+            <Icone nome="trash-2" tamanho={20} /> Excluir usuário
+        </button>
     );
 }
 
@@ -142,6 +164,7 @@ export function ListaUsuarios({ usuarios, euId }: { usuarios: LinhaUsuario[]; eu
                     aoFechar={editar.fechar}
                     acao={alterarUsuario.bind(null, editar.dados.id)}
                     botao="Salvar"
+                    rodape={editar.dados.id !== euId ? <BotaoExcluir usuario={editar.dados} aoExcluir={editar.fechar} /> : null}
                 >
                     <Campo rotulo="Nome" name="nome" defaultValue={editar.dados.nome} required maxLength={80} />
                     <Marcar nome="admin" rotulo="Administrador" marcado={editar.dados.admin} />
