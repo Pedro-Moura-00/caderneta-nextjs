@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // pasta .next/standalone com só o necessário para rodar (usada pelo Dockerfile)
+  output: "standalone",
   // endereços antigos da Caderneta em PHP (favoritos do navegador)
   async redirects() {
     return [

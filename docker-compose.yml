@@ -1,3 +1,12 @@
+# Caderneta do Bar: banco + aplicação.
+#   docker compose up -d --build      -> abre em http://localhost:8080
+# Só o banco (para desenvolver com npm run dev): docker compose up -d db
+#
+# Ajustes de cada máquina ficam num arquivo .env nesta pasta (fora do git), ex.:
+#   BAR_NOME=Bar do Will
+#   PORTA=8080
+#   BAR_SEED=1          (dados de exemplo na primeira vez)
+
 services:
   db:
     image: postgres:17-alpine
@@ -9,7 +18,7 @@ services:
       TZ: America/Sao_Paulo
       PGTZ: America/Sao_Paulo
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${PORTA_BANCO:-5432}:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -17,6 +26,21 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  app:
+    build: .
+    image: caderneta-bar
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://bar_will:bar_will_local@db:5432/bar_will
+      BAR_NOME: ${BAR_NOME:-Bar do Will}
+      # 1 = cria dados de exemplo na primeira vez (só com o banco vazio)
+      BAR_SEED: ${BAR_SEED:-0}
+    ports:
+      - "${PORTA:-8080}:3000"
 
 volumes:
   pg_data:

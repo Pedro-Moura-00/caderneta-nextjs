@@ -1,4 +1,5 @@
 import 'server-only';
+import { connection } from 'next/server';
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import { FUSO } from './config';
 
@@ -24,6 +25,8 @@ function pool(): Pool {
 }
 
 export async function query<T extends QueryResultRow>(sql: string, params: unknown[] = []): Promise<T[]> {
+    // dados do banco são sempre lidos na hora da requisição (nunca no build)
+    await connection();
     return (await pool().query<T>(sql, params)).rows;
 }
 
@@ -33,6 +36,7 @@ export async function um<T extends QueryResultRow>(sql: string, params: unknown[
 
 /** Executa o bloco numa transação; qualquer exceção desfaz tudo. */
 export async function transacao<T>(bloco: (db: Db) => Promise<T>): Promise<T> {
+    await connection();
     const client = await pool().connect();
     try {
         await client.query('BEGIN');
