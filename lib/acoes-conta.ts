@@ -27,7 +27,7 @@ function destinoSeguro(v: string): string {
 function validarDados(nome: string, login: string): string | null {
     if (nome === '') return 'Digite o nome.';
     if (Array.from(nome).length > 80) return 'Nome muito longo (máx. 80).';
-    if (!/^[a-z0-9._-]{3,40}$/.test(login)) return 'Login: de 3 a 40 letras sem acento, números, ponto, hífen ou sublinhado.';
+    if (!/^[a-z0-9._@-]{3,40}$/.test(login)) return 'Login: de 3 a 40 letras sem acento, números, ponto, hífen, sublinhado ou @ (pode ser um e-mail).';
     return null;
 }
 function validarSenha(senha: string, confirmacao: string): string | null {
