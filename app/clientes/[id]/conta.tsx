@@ -13,8 +13,8 @@ import { brl, corCss, parseMoeda } from '@/lib/formato';
 type Css = React.CSSProperties & Record<'--cor', string>;
 
 export type ItemHistorico =
-    | { tipo: 'item'; id: number; nome: string; cor: string | null; qtd: number; preco: number; quando: string }
-    | { tipo: 'pagamento'; id: number; valor: number; forma: Forma; estornado: boolean; motivo: string | null; quando: string };
+    | { tipo: 'item'; id: number; nome: string; cor: string | null; qtd: number; preco: number; quando: string; por: string | null }
+    | { tipo: 'pagamento'; id: number; valor: number; forma: Forma; estornado: boolean; motivo: string | null; quando: string; por: string | null; estornadoPor: string | null };
 
 export function BotaoEditarCliente({ cliente }: { cliente: Cliente }) {
     const m = useModal();
@@ -154,7 +154,7 @@ export function Historico({ itens }: { itens: ItemHistorico[] }) {
                             <div className="min-w-0 flex-1">
                                 <div className="text-base font-semibold">{h.nome}</div>
                                 <div className="flex items-center gap-1 text-xs text-suave">
-                                    <Icone nome="clock" tamanho={12} /> {h.quando} · {brl(h.preco)} cada
+                                    <Icone nome="clock" tamanho={12} /> {h.quando} · {brl(h.preco)} cada{h.por ? ` · ${h.por}` : ''}
                                 </div>
                             </div>
                             <div className="titulo text-xl">{brl(h.qtd * h.preco)}</div>
@@ -171,6 +171,7 @@ export function Historico({ itens }: { itens: ItemHistorico[] }) {
                                 <div className="text-base font-semibold text-verde">Pagamento · {rotuloForma(h.forma)}</div>
                                 <div className="flex items-center gap-1 text-xs text-suave">
                                     <Icone nome="clock" tamanho={12} /> {h.quando}
+                                    {h.por ? ` · ${h.por}` : ''}
                                 </div>
                             </div>
                             <div className="titulo text-xl text-verde">− {brl(h.valor)}</div>
@@ -186,7 +187,7 @@ export function Historico({ itens }: { itens: ItemHistorico[] }) {
                             <div className="min-w-0 flex-1">
                                 <div className="text-base font-semibold text-suave">Pagamento estornado · {rotuloForma(h.forma)}</div>
                                 <div className="text-xs text-suave">
-                                    {h.quando} · {h.motivo}
+                                    {h.quando} · {h.motivo}{h.estornadoPor ? ` · por ${h.estornadoPor}` : ''}
                                 </div>
                             </div>
                             <div className="titulo text-xl text-suave line-through">{brl(h.valor)}</div>

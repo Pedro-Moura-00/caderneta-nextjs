@@ -9,7 +9,7 @@ if (!url) {
 }
 
 const sql = await readFile(new URL('../db/schema.sql', import.meta.url), 'utf8');
-const client = new pg.Client({ connectionString: url, options: '-c timezone=America/Sao_Paulo' });
+const client = new pg.Client({ connectionString: url });
 await client.connect();
 try {
     await client.query(sql);

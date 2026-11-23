@@ -1,7 +1,6 @@
 import 'server-only';
 import { connection } from 'next/server';
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
-import { FUSO } from './config';
 
 /** Conexão (ou transação) com o banco. */
 export type Db = Pick<PoolClient, 'query'>;
@@ -16,9 +15,8 @@ function pool(): Pool {
         }
         global_.__barPool = new Pool({
             connectionString: process.env.DATABASE_URL,
-            // datas agrupadas e comparadas no horário do bar
-            options: `-c timezone=${FUSO}`,
-            max: 10,
+            // (o fuso fica explícito nas consultas: o Neon não aceita mudar o fuso na conexão)
+            max: 5,
         });
     }
     return global_.__barPool;

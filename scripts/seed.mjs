@@ -7,7 +7,7 @@ if (!url) {
     console.error('Defina DATABASE_URL (veja .env.example).');
     process.exit(1);
 }
-const db = new pg.Client({ connectionString: url, options: '-c timezone=America/Sao_Paulo' });
+const db = new pg.Client({ connectionString: url });
 await db.connect();
 
 try {

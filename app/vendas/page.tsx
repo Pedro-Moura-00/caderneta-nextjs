@@ -5,6 +5,7 @@ import { Suspense } from 'react';
 import { Icone } from '@/components/Icone';
 import { CabecalhoPagina, EstadoVazio, Pagina } from '@/components/ui';
 import { rotuloForma } from '@/lib/config';
+import { exigirUsuario } from '@/lib/auth';
 import * as dados from '@/lib/dados';
 import { brl, diaBr, diaDe, ehDia, horaDe, somarDias } from '@/lib/formato';
 import { BotaoCancelarVenda } from './cancelar';
@@ -24,6 +25,7 @@ export default function Vendas({ searchParams }: PageProps<'/vendas'>) {
 }
 
 async function Conteudo({ searchParams }: Pick<PageProps<'/vendas'>, 'searchParams'>) {
+    await exigirUsuario();
     const pedido = (await searchParams).dia;
     await connection();
     const hoje = diaDe(new Date());
@@ -83,6 +85,7 @@ async function Conteudo({ searchParams }: Pick<PageProps<'/vendas'>, 'searchPara
                                         <Icone nome="clock" tamanho={14} /> {hora}
                                     </span>
                                     <span className="text-sm text-suave">· {rotuloForma(v.forma)}</span>
+                                    {v.por ? <span className="text-sm text-suave">· {v.por}</span> : null}
                                     <span className={`titulo ml-auto text-xl ${cancelada ? 'text-suave line-through' : ''}`}>{brl(v.total)}</span>
                                 </div>
                                 <div className="flex flex-wrap gap-1.5">
@@ -93,7 +96,8 @@ async function Conteudo({ searchParams }: Pick<PageProps<'/vendas'>, 'searchPara
                                     ))}
                                 </div>
                                 {cancelada ? (
-                                    <div className="mt-2 text-sm font-semibold text-vermelho">Cancelada · {v.motivo_cancelamento}</div>
+                                    <div className="mt-2 text-sm font-semibold text-vermelho">Cancelada · {v.motivo_cancelamento}
+                                        {v.cancelada_por ? ` · por ${v.cancelada_por}` : ''}</div>
                                 ) : (
                                     <div className="mt-2 text-right">
                                         <BotaoCancelarVenda vendaId={v.id} descricao={`${hora} · ${brl(v.total)} · ${rotuloForma(v.forma)}`} />

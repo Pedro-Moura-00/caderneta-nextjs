@@ -5,6 +5,7 @@ import { COR_PADRAO } from './config';
 import { RegraNegocio, query, transacao, um, umaVez } from './db';
 import { brl, parseMoeda } from './formato';
 import * as s from './servicos';
+import { usuarioAtual } from './auth';
 
 /*
  * Ações dos formulários. Cada uma devolve a mensagem do aviso (toast) e, quando for o caso,
@@ -16,6 +17,7 @@ export type Resultado = { ok: boolean; msg: string; cor: Cor; destino?: string }
 
 const sucesso = (msg: string, destino?: string, cor: Cor = 'green'): Resultado => ({ ok: true, msg, cor, destino });
 const falha = (msg: string, destino?: string): Resultado => ({ ok: false, msg, cor: 'red', destino });
+const SEM_SESSAO: Resultado = { ok: false, msg: 'Sua sessão terminou. Entre de novo.', cor: 'red', destino: '/entrar' };
 
 function texto(fd: FormData, campo: string): string {
     const v = fd.get(campo);
@@ -72,6 +74,7 @@ function validarCliente(c: ReturnType<typeof camposCliente>): string | null {
 }
 
 export async function criarCliente(fd: FormData): Promise<Resultado> {
+    if (!(await usuarioAtual())) return SEM_SESSAO;
     const c = camposCliente(fd);
     const erro = validarCliente(c);
     if (erro) return falha(erro);
@@ -89,6 +92,7 @@ export async function criarCliente(fd: FormData): Promise<Resultado> {
 }
 
 export async function editarCliente(clienteId: number, fd: FormData): Promise<Resultado> {
+    if (!(await usuarioAtual())) return SEM_SESSAO;
     const c = camposCliente(fd);
     const erro = validarCliente(c);
     if (erro) return falha(erro);
@@ -105,6 +109,7 @@ export async function editarCliente(clienteId: number, fd: FormData): Promise<Re
 
 /** Arquiva (esconde da lista) um cliente sem saldo. O histórico continua guardado. */
 export async function arquivarCliente(clienteId: number): Promise<Resultado> {
+    if (!(await usuarioAtual())) return SEM_SESSAO;
     return executar(async () => {
         const c = await um<{ saldo: number }>('SELECT saldo::float8 AS saldo FROM clientes WHERE id = $1', [id(clienteId)]);
         if (!c) return falha('Cliente não encontrado', '/');
@@ -115,6 +120,7 @@ export async function arquivarCliente(clienteId: number): Promise<Resultado> {
 }
 
 export async function reativarCliente(clienteId: number): Promise<Resultado> {
+    if (!(await usuarioAtual())) return SEM_SESSAO;
     return executar(async () => {
         const r = await query('UPDATE clientes SET arquivado_em = NULL, updated_at = now() WHERE id = $1 RETURNING id', [id(clienteId)]);
         if (r.length === 0) return falha('Cliente não encontrado', '/');
@@ -126,11 +132,13 @@ export async function reativarCliente(clienteId: number): Promise<Resultado> {
 
 /** Lança consumo na conta do cliente. */
 export async function lancarFiado(fd: FormData): Promise<Resultado> {
+    const eu = await usuarioAtual();
+    if (!eu) return SEM_SESSAO;
     const clienteId = id(fd.get('cliente_id'));
     return executar(
         async () => {
             const carrinho = s.lerCarrinho(fd.get('carrinho'));
-            const feito = await umaVez(fd.get('operacao'), (db) => s.lancarFiado(db, clienteId, carrinho));
+            const feito = await umaVez(fd.get('operacao'), (db) => s.lancarFiado(db, clienteId, carrinho, eu.id));
             return feito === null ? sucesso('Esse consumo já tinha sido anotado', undefined, 'amber') : sucesso('Consumo anotado na conta');
         },
         (msg) => (msg === 'Cliente não encontrado' ? '/' : undefined),
@@ -139,25 +147,31 @@ export async function lancarFiado(fd: FormData): Promise<Resultado> {
 
 /** Venda paga na hora. */
 export async function vendaAvista(fd: FormData): Promise<Resultado> {
+    const eu = await usuarioAtual();
+    if (!eu) return SEM_SESSAO;
     return executar(async () => {
         const carrinho = s.lerCarrinho(fd.get('carrinho'));
-        const venda = await umaVez(fd.get('operacao'), (db) => s.vendaAvista(db, carrinho, fd.get('forma')));
+        const venda = await umaVez(fd.get('operacao'), (db) => s.vendaAvista(db, carrinho, fd.get('forma'), eu.id));
         return venda === null ? sucesso('Essa venda já tinha sido registrada', undefined, 'amber') : sucesso('Venda à vista · ' + brl(venda.total));
     });
 }
 
 /** Cancela uma venda (na venda à vista, o pagamento é estornado junto). */
 export async function cancelarVenda(vendaId: number, fd: FormData): Promise<Resultado> {
+    const eu = await usuarioAtual();
+    if (!eu) return SEM_SESSAO;
     return executar(async () => {
-        await s.cancelarVenda(id(vendaId), fd.get('motivo'));
+        await s.cancelarVenda(id(vendaId), fd.get('motivo'), eu.id);
         return sucesso('Venda cancelada', undefined, 'amber');
     });
 }
 
 /** Muda a quantidade de um item da conta (0 remove). */
 export async function alterarItem(itemId: number, qtd: number): Promise<Resultado> {
+    const eu = await usuarioAtual();
+    if (!eu) return SEM_SESSAO;
     return executar(async () => {
-        await s.alterarItem(id(itemId), Math.trunc(Number(qtd)));
+        await s.alterarItem(id(itemId), Math.trunc(Number(qtd)), eu.id);
         return sucesso(qtd === 0 ? 'Item removido da conta' : 'Consumo atualizado');
     });
 }
@@ -166,10 +180,12 @@ export async function alterarItem(itemId: number, qtd: number): Promise<Resultad
 
 /** Recebe pagamento de fiado. */
 export async function receberPagamento(fd: FormData): Promise<Resultado> {
+    const eu = await usuarioAtual();
+    if (!eu) return SEM_SESSAO;
     const clienteId = id(fd.get('cliente_id'));
     return executar(
         async () => {
-            const r = await umaVez(fd.get('operacao'), (db) => s.receber(db, clienteId, parseMoeda(fd.get('valor')), fd.get('forma')));
+            const r = await umaVez(fd.get('operacao'), (db) => s.receber(db, clienteId, parseMoeda(fd.get('valor')), fd.get('forma'), eu.id));
             if (r === null) return sucesso('Esse pagamento já tinha sido registrado', undefined, 'amber');
             return sucesso(r.falta <= 0.004 ? 'Conta quitada!' : `Pago ${brl(r.pago)}. Falta ${brl(r.falta)}`);
         },
@@ -179,8 +195,10 @@ export async function receberPagamento(fd: FormData): Promise<Resultado> {
 
 /** Estorna (desfaz) um pagamento de fiado; ele continua no histórico, riscado. */
 export async function estornarPagamento(pagamentoId: number, fd: FormData): Promise<Resultado> {
+    const eu = await usuarioAtual();
+    if (!eu) return SEM_SESSAO;
     return executar(async () => {
-        await s.estornar(id(pagamentoId), fd.get('motivo'));
+        await s.estornar(id(pagamentoId), fd.get('motivo'), eu.id);
         return sucesso('Pagamento estornado: o valor voltou para a conta', undefined, 'amber');
     });
 }
@@ -209,6 +227,7 @@ async function validarProduto(p: ReturnType<typeof camposProduto>): Promise<stri
 }
 
 export async function salvarProduto(produtoId: number | null, fd: FormData): Promise<Resultado> {
+    if (!(await usuarioAtual())) return SEM_SESSAO;
     const p = camposProduto(fd);
     const erro = await validarProduto(p);
     if (erro) return falha(erro);
@@ -229,6 +248,7 @@ export async function salvarProduto(produtoId: number | null, fd: FormData): Pro
 
 /** Remove um produto (os consumos já lançados guardam nome e preço próprios). */
 export async function removerProduto(produtoId: number): Promise<Resultado> {
+    if (!(await usuarioAtual())) return SEM_SESSAO;
     return executar(async () => {
         const r = await query('DELETE FROM produtos WHERE id = $1 RETURNING id', [id(produtoId)]);
         return r.length ? sucesso('Produto removido') : falha('Produto não encontrado');
@@ -247,6 +267,7 @@ function validarCategoria(c: ReturnType<typeof camposCategoria>): string | null 
 }
 
 export async function salvarCategoria(categoriaId: number | null, fd: FormData): Promise<Resultado> {
+    if (!(await usuarioAtual())) return SEM_SESSAO;
     const c = camposCategoria(fd);
     const erro = validarCategoria(c);
     if (erro) return falha(erro);
@@ -262,6 +283,7 @@ export async function salvarCategoria(categoriaId: number | null, fd: FormData):
 
 /** Remove uma categoria (só se estiver vazia). */
 export async function removerCategoria(categoriaId: number): Promise<Resultado> {
+    if (!(await usuarioAtual())) return SEM_SESSAO;
     return executar(() =>
         transacao(async (db) => {
             const cat = await db.query('SELECT 1 FROM categorias WHERE id = $1 FOR UPDATE', [id(categoriaId)]);

@@ -1,6 +1,7 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { sair } from '@/lib/acoes-conta';
 import type { Categoria, Produto } from '@/lib/dados';
 import { ModalCliente, ModalVenda } from './formularios';
 import { useModal } from './interativos';
@@ -15,6 +16,25 @@ export function BotaoNovoCliente({ className, nomeInicial, children }: { classNa
             </button>
             <ModalCliente aberto={m.aberto} aoFechar={m.fechar} titulo="Novo cliente" botao="Salvar e abrir conta" nomeInicial={nomeInicial} />
         </>
+    );
+}
+
+/** Sai e recarrega a página inteira (o navegador não guarda as telas de antes). */
+export function BotaoSair({ className }: { className: string }) {
+    const [saindo, setSaindo] = useState(false);
+    return (
+        <button
+            type="button"
+            className={className}
+            disabled={saindo}
+            onClick={async () => {
+                setSaindo(true);
+                await sair().catch(() => {});
+                window.location.replace('/entrar');
+            }}
+        >
+            Sair
+        </button>
     );
 }
 

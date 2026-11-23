@@ -9,6 +9,29 @@ Sistema de **fiado** para bar, portado da versão PHP/CodeIgniter (`C:\Bar_will`
 
 Nada financeiro é apagado: pagamento errado é **estornado** e venda à vista é **cancelada**, com data e motivo.
 
+## Login
+
+Cada pessoa entra com login e senha próprios; vendas, pagamentos, cancelamentos e estornos
+guardam quem fez. No primeiro acesso, a tela pede o **código de instalação** (variável
+`CODIGO_INSTALACAO` no servidor) para criar o administrador, que depois cadastra os outros em
+**Usuários**. Cinco senhas erradas seguidas bloqueiam o login por 10 minutos; o administrador
+pode definir uma senha nova para quem esqueceu.
+
+## Publicar na internet (Vercel + Neon)
+
+1. Crie uma conta em <https://vercel.com> entrando com o GitHub.
+2. **Add New → Project**, importe o repositório `caderneta-nextjs` e, antes de publicar, abra
+   **Environment Variables** e adicione:
+   - `CODIGO_INSTALACAO`: um código só seu (usado uma vez, para criar o administrador)
+   - `BAR_NOME`: `Bar do Will`
+3. Depois de criado o projeto: **Storage → Create Database → Neon** (Postgres gratuito), ligado
+   ao projeto. Isso cria a variável `DATABASE_URL` sozinho.
+4. **Deployments → Redeploy**. O build cria as tabelas (`vercel.json`) e o site fica no ar em
+   `https://<projeto>.vercel.app`.
+5. Abra o site, informe o código de instalação e crie o administrador.
+
+A cada `git push` para o GitHub, a Vercel publica a versão nova sozinha.
+
 ## Rodar com Docker (recomendado)
 
 Só precisa do Docker Desktop. Na pasta do projeto:
@@ -26,6 +49,7 @@ Ajustes da máquina ficam num arquivo `.env` na pasta do projeto (fora do git), 
 BAR_NOME=Bar do Will
 PORTA=8080
 BAR_SEED=1
+CODIGO_INSTALACAO=um-codigo-so-seu
 ```
 
 `BAR_SEED=1` cria dados de exemplo na primeira vez (só com o banco vazio).

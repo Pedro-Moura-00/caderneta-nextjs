@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
-import { BotaoNovoCliente, BotaoVendaAvista } from '@/components/botoes';
+import { BotaoNovoCliente, BotaoSair, BotaoVendaAvista } from '@/components/botoes';
 import { Icone } from '@/components/Icone';
 import { EstadoVazio, Pagina } from '@/components/ui';
 import { nomeBar } from '@/lib/bar';
 import { CLIENTES_POR_PAGINA } from '@/lib/config';
+import { exigirUsuario } from '@/lib/auth';
 import * as dados from '@/lib/dados';
 import { FILTROS, type Cliente, type Filtro } from '@/lib/dados';
 import { brl, iniciais } from '@/lib/formato';
@@ -27,6 +28,7 @@ function primeiro(v: string | string[] | undefined): string {
 }
 
 async function Conteudo({ searchParams }: Pick<PageProps<'/'>, 'searchParams'>) {
+    const eu = await exigirUsuario();
     const sp = await searchParams;
     const busca = primeiro(sp.q).trim();
     const verParam = primeiro(sp.ver);
@@ -66,6 +68,15 @@ async function Conteudo({ searchParams }: Pick<PageProps<'/'>, 'searchParams'>) 
                             <Icone nome="package" tamanho={16} /> Produtos
                         </Link>
                     </nav>
+                </div>
+                <div className="mt-3 flex items-center gap-3 text-[13px] text-[#C7D2CB]">
+                    <span className="min-w-0 truncate">
+                        Olá, <b className="text-white">{eu.nome}</b>
+                    </span>
+                    <Link href="/usuarios" className="toque ml-auto font-bold text-white underline decoration-white/30 underline-offset-4">
+                        {eu.admin ? 'Usuários' : 'Minha senha'}
+                    </Link>
+                    <BotaoSair className="toque font-bold text-white underline decoration-white/30 underline-offset-4" />
                 </div>
                 <div className="mt-4 flex gap-3">
                     <div className="flex-1 rounded-xl bg-white/[.08] px-4 py-3">

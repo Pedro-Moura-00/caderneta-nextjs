@@ -79,24 +79,28 @@ export async function totalAReceber(): Promise<number> {
 export async function recebidoHoje(): Promise<number> {
     return (
         (await um<{ v: number }>(
-            'SELECT COALESCE(SUM(valor), 0)::float8 AS v FROM pagamentos WHERE estornado_em IS NULL AND em >= current_date AND em < current_date + 1',
+            `SELECT COALESCE(SUM(valor), 0)::float8 AS v FROM pagamentos WHERE estornado_em IS NULL
+             AND em >= ((now() AT TIME ZONE 'America/Sao_Paulo')::date)::timestamp AT TIME ZONE 'America/Sao_Paulo'`,
         ))?.v ?? 0
     );
 }
 
 export type LinhaHistorico =
-    | { tipo: 'item'; id: number; nome: string; cor: string | null; qtd: number; preco: number; em: Date }
-    | { tipo: 'pagamento'; id: number; valor: number; forma: Forma; estornado_em: Date | null; motivo_estorno: string | null; em: Date };
+    | { tipo: 'item'; id: number; nome: string; cor: string | null; qtd: number; preco: number; em: Date; por: string | null }
+    | { tipo: 'pagamento'; id: number; valor: number; forma: Forma; estornado_em: Date | null; motivo_estorno: string | null; em: Date; por: string | null; estornado_por: string | null };
 
 /** Histórico da conta: itens das vendas fiado válidas e pagamentos (inclusive estornados). */
 export async function historico(id: number, limite: number | null) {
     const sql = `SELECT 'item' AS tipo, i.id, i.nome, i.cor, i.qtd, i.preco::float8 AS preco, NULL::float8 AS valor, NULL AS forma,
-                        NULL::timestamptz AS estornado_em, NULL AS motivo_estorno, v.em
-                 FROM venda_itens i JOIN vendas v ON v.id = i.venda_id
+                        NULL::timestamptz AS estornado_em, NULL AS motivo_estorno, v.em,
+                        u.nome AS por, NULL AS estornado_por
+                 FROM venda_itens i JOIN vendas v ON v.id = i.venda_id LEFT JOIN usuarios u ON u.id = v.usuario_id
                  WHERE v.cliente_id = $1 AND v.cancelada_em IS NULL
                  UNION ALL
-                 SELECT 'pagamento', p.id, NULL, NULL, NULL, NULL, p.valor::float8, p.forma, p.estornado_em, p.motivo_estorno, p.em
-                 FROM pagamentos p WHERE p.cliente_id = $1`;
+                 SELECT 'pagamento', p.id, NULL, NULL, NULL, NULL, p.valor::float8, p.forma, p.estornado_em, p.motivo_estorno, p.em,
+                        u.nome, ue.nome
+                 FROM pagamentos p LEFT JOIN usuarios u ON u.id = p.usuario_id LEFT JOIN usuarios ue ON ue.id = p.estornado_por
+                 WHERE p.cliente_id = $1`;
     const total = (await um<{ n: number }>(`SELECT count(*)::int AS n FROM (${sql}) h`, [id]))?.n ?? 0;
     const itens = await query<LinhaHistorico>(`${sql} ORDER BY em DESC, tipo ASC, id DESC${limite ? ' LIMIT ' + Math.trunc(limite) : ''}`, [id]);
     return { itens, total };
@@ -109,17 +113,22 @@ export type VendaAvista = {
     motivo_cancelamento: string | null;
     forma: Forma | null;
     total: number;
+    por: string | null;
+    cancelada_por: string | null;
     itens: { id: number; nome: string; qtd: number }[];
 };
 
 /** Vendas à vista de um dia (AAAA-MM-DD), com itens e pagamento. */
 export async function avistaDoDia(dia: string): Promise<VendaAvista[]> {
     const vendas = await query<Omit<VendaAvista, 'itens'>>(
-        `SELECT v.id, v.em, v.cancelada_em, v.motivo_cancelamento, p.forma, SUM(i.qtd * i.preco)::float8 AS total
+        `SELECT v.id, v.em, v.cancelada_em, v.motivo_cancelamento, p.forma, SUM(i.qtd * i.preco)::float8 AS total,
+                MAX(u.nome) AS por, MAX(uc.nome) AS cancelada_por
          FROM vendas v
+         LEFT JOIN usuarios u ON u.id = v.usuario_id
+         LEFT JOIN usuarios uc ON uc.id = v.cancelada_por
          JOIN venda_itens i ON i.venda_id = v.id
          LEFT JOIN pagamentos p ON p.venda_id = v.id
-         WHERE v.tipo = 'avista' AND v.em >= $1::date AND v.em < $1::date + 1
+         WHERE v.tipo = 'avista' AND v.em >= ($1::date::timestamp AT TIME ZONE 'America/Sao_Paulo') AND v.em < (($1::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
          GROUP BY v.id, p.id
          ORDER BY v.em DESC, v.id DESC`,
         [dia],
@@ -156,12 +165,12 @@ export async function resumo(de: string, ate: string): Promise<Resumo> {
         `SELECT COALESCE(SUM(valor), 0)::float8 AS recebido,
                 COALESCE(SUM(CASE WHEN venda_id IS NOT NULL THEN valor END), 0)::float8 AS avista,
                 count(*)::int AS n
-         FROM pagamentos WHERE estornado_em IS NULL AND em >= $1::date AND em < $2::date + 1`,
+         FROM pagamentos WHERE estornado_em IS NULL AND em >= ($1::date::timestamp AT TIME ZONE 'America/Sao_Paulo') AND em < (($2::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')`,
         p,
     ))!;
     const formas = await query<{ forma: Forma; valor: number }>(
         `SELECT forma, SUM(valor)::float8 AS valor FROM pagamentos
-         WHERE estornado_em IS NULL AND em >= $1::date AND em < $2::date + 1 GROUP BY forma`,
+         WHERE estornado_em IS NULL AND em >= ($1::date::timestamp AT TIME ZONE 'America/Sao_Paulo') AND em < (($2::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo') GROUP BY forma`,
         p,
     );
     // uma passada só pelos itens: soma por produto e categoria
@@ -169,7 +178,7 @@ export async function resumo(de: string, ate: string): Promise<Resumo> {
         `SELECT i.nome, COALESCE(i.cat_nome, 'Sem categoria') AS cat, MAX(i.cor) AS cor,
                 SUM(i.qtd)::int AS qtd, SUM(i.qtd * i.preco)::float8 AS valor
          FROM vendas v JOIN venda_itens i ON i.venda_id = v.id
-         WHERE v.cancelada_em IS NULL AND v.em >= $1::date AND v.em < $2::date + 1
+         WHERE v.cancelada_em IS NULL AND v.em >= ($1::date::timestamp AT TIME ZONE 'America/Sao_Paulo') AND v.em < (($2::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
          GROUP BY i.nome, COALESCE(i.cat_nome, 'Sem categoria')`,
         p,
     );
@@ -219,6 +228,7 @@ export type LinhaExportacao = {
     valor: number | null;
     forma: string | null;
     situacao: string;
+    usuario: string | null;
 };
 
 /** Cada item vendido e cada pagamento do período, para a planilha. */
@@ -229,15 +239,16 @@ export async function linhasExportacao(de: string, ate: string): Promise<LinhaEx
                    NULLIF(TRIM(concat_ws(' ', c.nome, c.sobrenome)), '') AS cliente,
                    i.nome AS descricao, i.cat_nome AS categoria, i.qtd AS quantidade, i.preco::float8 AS preco_unitario,
                    (i.qtd * i.preco)::float8 AS valor, NULL AS forma,
-                   CASE WHEN v.cancelada_em IS NULL THEN '' ELSE 'cancelada' END AS situacao
+                   CASE WHEN v.cancelada_em IS NULL THEN '' ELSE 'cancelada' END AS situacao, u.nome AS usuario
             FROM vendas v JOIN venda_itens i ON i.venda_id = v.id LEFT JOIN clientes c ON c.id = v.cliente_id
-            WHERE v.em >= $1::date AND v.em < $2::date + 1
+            LEFT JOIN usuarios u ON u.id = v.usuario_id
+            WHERE v.em >= ($1::date::timestamp AT TIME ZONE 'America/Sao_Paulo') AND v.em < (($2::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
             UNION ALL
             SELECT p.em, CASE WHEN p.venda_id IS NULL THEN 'Pagamento de fiado' ELSE 'Pagamento à vista' END,
                    NULLIF(TRIM(concat_ws(' ', c.nome, c.sobrenome)), ''), 'Pagamento', NULL, NULL, NULL,
-                   p.valor::float8, p.forma, CASE WHEN p.estornado_em IS NULL THEN '' ELSE 'estornado' END
-            FROM pagamentos p LEFT JOIN clientes c ON c.id = p.cliente_id
-            WHERE p.em >= $1::date AND p.em < $2::date + 1
+                   p.valor::float8, p.forma, CASE WHEN p.estornado_em IS NULL THEN '' ELSE 'estornado' END, u.nome
+            FROM pagamentos p LEFT JOIN clientes c ON c.id = p.cliente_id LEFT JOIN usuarios u ON u.id = p.usuario_id
+            WHERE p.em >= ($1::date::timestamp AT TIME ZONE 'America/Sao_Paulo') AND p.em < (($2::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
         ) x ORDER BY data_hora, tipo`,
         [de, ate],
     );

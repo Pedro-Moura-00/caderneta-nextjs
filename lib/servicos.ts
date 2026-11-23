@@ -83,8 +83,8 @@ async function montarItens(db: Db, carrinho: Carrinho): Promise<ItemNovo[]> {
     }));
 }
 
-async function gravarVenda(db: Db, tipo: 'fiado' | 'avista', clienteId: number | null, itens: ItemNovo[]): Promise<number> {
-    const v = await db.query<{ id: number }>('INSERT INTO vendas (cliente_id, tipo) VALUES ($1, $2) RETURNING id', [clienteId, tipo]);
+async function gravarVenda(db: Db, tipo: 'fiado' | 'avista', clienteId: number | null, itens: ItemNovo[], usuarioId: number): Promise<number> {
+    const v = await db.query<{ id: number }>('INSERT INTO vendas (cliente_id, tipo, usuario_id) VALUES ($1, $2, $3) RETURNING id', [clienteId, tipo, usuarioId]);
     const vendaId = v.rows[0].id;
     for (const i of itens) {
         await db.query(
@@ -96,28 +96,28 @@ async function gravarVenda(db: Db, tipo: 'fiado' | 'avista', clienteId: number |
 }
 
 /** Lança o carrinho na conta do cliente. */
-export async function lancarFiado(db: Db, clienteId: number, carrinho: Carrinho): Promise<number> {
+export async function lancarFiado(db: Db, clienteId: number, carrinho: Carrinho, usuarioId: number): Promise<number> {
     const cliente = await travarCliente(db, clienteId);
     if (!cliente) throw new RegraNegocio('Cliente não encontrado');
     if (cliente.arquivado_em !== null) throw new RegraNegocio('Cliente arquivado: reative a conta para lançar');
     const itens = await montarItens(db, carrinho);
-    const vendaId = await gravarVenda(db, 'fiado', clienteId, itens);
+    const vendaId = await gravarVenda(db, 'fiado', clienteId, itens, usuarioId);
     await recalcularCliente(db, clienteId);
     return vendaId;
 }
 
 /** Venda paga na hora: itens + pagamento ligado à venda. */
-export async function vendaAvista(db: Db, carrinho: Carrinho, forma: unknown) {
+export async function vendaAvista(db: Db, carrinho: Carrinho, forma: unknown, usuarioId: number) {
     if (!ehForma(forma)) throw new RegraNegocio('Forma de pagamento inválida');
     const itens = await montarItens(db, carrinho);
     const total = Math.round(itens.reduce((s, i) => s + i.qtd * i.preco, 0) * 100) / 100;
-    const vendaId = await gravarVenda(db, 'avista', null, itens);
-    await db.query('INSERT INTO pagamentos (venda_id, valor, forma) VALUES ($1, $2, $3)', [vendaId, total, forma]);
+    const vendaId = await gravarVenda(db, 'avista', null, itens, usuarioId);
+    await db.query('INSERT INTO pagamentos (venda_id, valor, forma, usuario_id) VALUES ($1, $2, $3, $4)', [vendaId, total, forma, usuarioId]);
     return { id: vendaId, total };
 }
 
 /** Muda a quantidade de um item da conta (0 remove). Retorna o id do cliente. */
-export async function alterarItem(itemId: number, qtd: number): Promise<number> {
+export async function alterarItem(itemId: number, qtd: number, usuarioId: number): Promise<number> {
     if (!Number.isInteger(qtd) || qtd < 0 || qtd > QTD_MAXIMA) throw new RegraNegocio(`Quantidade deve ser de 1 a ${QTD_MAXIMA}`);
 
     return transacao(async (db) => {
@@ -138,8 +138,8 @@ export async function alterarItem(itemId: number, qtd: number): Promise<number> 
             const resto = await db.query('SELECT 1 FROM venda_itens WHERE venda_id = $1 LIMIT 1', [item.venda_id]);
             if (resto.rowCount === 0) {
                 await db.query(
-                    "UPDATE vendas SET cancelada_em = now(), motivo_cancelamento = 'Todos os itens foram removidos', updated_at = now() WHERE id = $1",
-                    [item.venda_id],
+                    "UPDATE vendas SET cancelada_em = now(), cancelada_por = $2, motivo_cancelamento = 'Todos os itens foram removidos', updated_at = now() WHERE id = $1",
+                    [item.venda_id, usuarioId],
                 );
             }
         } else {
@@ -151,7 +151,7 @@ export async function alterarItem(itemId: number, qtd: number): Promise<number> 
 }
 
 /** Cancela uma venda inteira. Na venda à vista, o pagamento dela é estornado junto. */
-export async function cancelarVenda(vendaId: number, m: unknown) {
+export async function cancelarVenda(vendaId: number, m: unknown, usuarioId: number) {
     return transacao(async (db) => {
         const r = await db.query<{ id: number; cliente_id: number | null; cancelada_em: Date | null; em: Date }>(
             'SELECT id, cliente_id, cancelada_em, em FROM vendas WHERE id = $1',
@@ -162,10 +162,11 @@ export async function cancelarVenda(vendaId: number, m: unknown) {
         if (venda.cancelada_em !== null) throw new RegraNegocio('Essa venda já estava cancelada');
         if (venda.cliente_id !== null) await travarCliente(db, venda.cliente_id);
         const mot = motivo(m);
-        await db.query('UPDATE vendas SET cancelada_em = now(), motivo_cancelamento = $2, updated_at = now() WHERE id = $1', [vendaId, mot]);
-        await db.query('UPDATE pagamentos SET estornado_em = now(), motivo_estorno = $2 WHERE venda_id = $1 AND estornado_em IS NULL', [
+        await db.query('UPDATE vendas SET cancelada_em = now(), cancelada_por = $3, motivo_cancelamento = $2, updated_at = now() WHERE id = $1', [vendaId, mot, usuarioId]);
+        await db.query('UPDATE pagamentos SET estornado_em = now(), estornado_por = $3, motivo_estorno = $2 WHERE venda_id = $1 AND estornado_em IS NULL', [
             vendaId,
             'Venda cancelada: ' + mot,
+            usuarioId,
         ]);
         if (venda.cliente_id !== null) await recalcularCliente(db, venda.cliente_id);
         return venda;
@@ -178,20 +179,20 @@ export async function cancelarVenda(vendaId: number, m: unknown) {
  * Recebe um pagamento de fiado. O valor é limitado ao saldo devedor; a linha do cliente
  * fica travada durante a operação, então dois recebimentos simultâneos não pagam duas vezes.
  */
-export async function receber(db: Db, clienteId: number, valor: number | null, forma: unknown) {
+export async function receber(db: Db, clienteId: number, valor: number | null, forma: unknown, usuarioId: number) {
     if (!ehForma(forma)) throw new RegraNegocio('Forma de pagamento inválida');
     if (valor === null || valor <= 0) throw new RegraNegocio('Valor inválido');
     const cliente = await travarCliente(db, clienteId);
     if (!cliente) throw new RegraNegocio('Cliente não encontrado');
     if (cliente.saldo <= 0.004) throw new RegraNegocio('Esse cliente não tem saldo a pagar');
     const pago = Math.round(Math.min(valor, cliente.saldo) * 100) / 100;
-    await db.query('INSERT INTO pagamentos (cliente_id, valor, forma) VALUES ($1, $2, $3)', [clienteId, pago, forma]);
+    await db.query('INSERT INTO pagamentos (cliente_id, valor, forma, usuario_id) VALUES ($1, $2, $3, $4)', [clienteId, pago, forma, usuarioId]);
     await recalcularCliente(db, clienteId);
     return { pago, falta: Math.round((cliente.saldo - pago) * 100) / 100 };
 }
 
 /** Estorna um pagamento de fiado (o valor volta para a conta); ele fica no histórico, riscado. */
-export async function estornar(pagamentoId: number, m: unknown) {
+export async function estornar(pagamentoId: number, m: unknown, usuarioId: number) {
     return transacao(async (db) => {
         const r = await db.query<{ cliente_id: number | null; estornado_em: Date | null }>(
             'SELECT cliente_id, estornado_em FROM pagamentos WHERE id = $1',
@@ -201,7 +202,7 @@ export async function estornar(pagamentoId: number, m: unknown) {
         if (!pagamento || pagamento.cliente_id === null) throw new RegraNegocio('Pagamento não encontrado');
         if (pagamento.estornado_em !== null) throw new RegraNegocio('Esse pagamento já estava estornado');
         await travarCliente(db, pagamento.cliente_id);
-        await db.query('UPDATE pagamentos SET estornado_em = now(), motivo_estorno = $2 WHERE id = $1', [pagamentoId, motivo(m)]);
+        await db.query('UPDATE pagamentos SET estornado_em = now(), estornado_por = $3, motivo_estorno = $2 WHERE id = $1', [pagamentoId, motivo(m), usuarioId]);
         await recalcularCliente(db, pagamento.cliente_id);
         return { cliente_id: pagamento.cliente_id };
     });

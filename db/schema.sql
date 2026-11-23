@@ -1,7 +1,32 @@
 -- Esquema da Caderneta (PostgreSQL). Idempotente: pode rodar de novo (npm run db:migrate).
--- Datas em timestamptz; a conexão usa o fuso America/Sao_Paulo (ver lib/db.ts).
+-- Datas em timestamptz; dias são sempre calculados no fuso America/Sao_Paulo (ver lib/dados.ts).
 
 CREATE EXTENSION IF NOT EXISTS unaccent;
+
+-- quem usa a Caderneta (senha guardada só como hash scrypt)
+CREATE TABLE IF NOT EXISTS usuarios (
+    id             serial PRIMARY KEY,
+    nome           varchar(80)  NOT NULL,
+    login          varchar(40)  NOT NULL UNIQUE,
+    senha_hash     text         NOT NULL,
+    admin          boolean      NOT NULL DEFAULT false,
+    ativo          boolean      NOT NULL DEFAULT true,
+    -- tentativas erradas seguidas; ao chegar no limite, o login fica bloqueado por um tempo
+    tentativas     integer      NOT NULL DEFAULT 0,
+    bloqueado_ate  timestamptz,
+    created_at     timestamptz  NOT NULL DEFAULT now(),
+    updated_at     timestamptz  NOT NULL DEFAULT now()
+);
+
+-- sessões abertas (o cookie guarda o token; aqui fica só o hash dele)
+CREATE TABLE IF NOT EXISTS sessoes (
+    token_hash  char(64)    PRIMARY KEY,
+    usuario_id  integer     NOT NULL REFERENCES usuarios (id) ON DELETE CASCADE,
+    criada_em   timestamptz NOT NULL DEFAULT now(),
+    expira_em   timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sessoes_usuario ON sessoes (usuario_id);
+CREATE INDEX IF NOT EXISTS sessoes_expira  ON sessoes (expira_em);
 
 CREATE TABLE IF NOT EXISTS categorias (
     id          serial PRIMARY KEY,
@@ -84,6 +109,12 @@ CREATE TABLE IF NOT EXISTS pagamentos (
 CREATE INDEX IF NOT EXISTS pagamentos_cliente ON pagamentos (cliente_id, estornado_em);
 CREATE INDEX IF NOT EXISTS pagamentos_venda   ON pagamentos (venda_id);
 CREATE INDEX IF NOT EXISTS pagamentos_em      ON pagamentos (em);
+
+-- quem lançou, cancelou ou estornou (NULL nos lançamentos de antes do login existir)
+ALTER TABLE vendas     ADD COLUMN IF NOT EXISTS usuario_id    integer REFERENCES usuarios (id) ON DELETE SET NULL;
+ALTER TABLE vendas     ADD COLUMN IF NOT EXISTS cancelada_por integer REFERENCES usuarios (id) ON DELETE SET NULL;
+ALTER TABLE pagamentos ADD COLUMN IF NOT EXISTS usuario_id    integer REFERENCES usuarios (id) ON DELETE SET NULL;
+ALTER TABLE pagamentos ADD COLUMN IF NOT EXISTS estornado_por integer REFERENCES usuarios (id) ON DELETE SET NULL;
 
 -- tokens de formulário já processados (evita lançar duas vezes o mesmo envio)
 CREATE TABLE IF NOT EXISTS operacoes (

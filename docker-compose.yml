@@ -38,6 +38,8 @@ services:
       BAR_NOME: ${BAR_NOME:-Bar do Will}
       # 1 = cria dados de exemplo na primeira vez (só com o banco vazio)
       BAR_SEED: ${BAR_SEED:-0}
+      # pedido só para criar o primeiro usuário (administrador)
+      CODIGO_INSTALACAO: ${CODIGO_INSTALACAO:-}
     ports:
       - "${PORTA:-8080}:3000"
 

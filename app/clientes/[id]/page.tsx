@@ -8,11 +8,14 @@ import { BotaoAcao, BotaoConfirmar } from '@/components/interativos';
 import { CabecalhoPagina, EstadoVazio, Pagina } from '@/components/ui';
 import { arquivarCliente, reativarCliente } from '@/lib/acoes';
 import { HISTORICO_POR_PAGINA } from '@/lib/config';
+import { exigirUsuario, usuarioAtual } from '@/lib/auth';
 import * as dados from '@/lib/dados';
 import { brl, quando } from '@/lib/formato';
 import { AcoesConta, BotaoEditarCliente, Historico, type ItemHistorico } from './conta';
 
 export async function generateMetadata({ params }: PageProps<'/clientes/[id]'>): Promise<Metadata> {
+    // sem sessão, o título não pode revelar o nome do cliente
+    if (!(await usuarioAtual())) return { title: 'Cliente' };
     const c = await dados.cliente(Number((await params).id));
     return { title: c ? `${c.nome} ${c.sobrenome}`.trim() : 'Cliente' };
 }
@@ -29,6 +32,7 @@ export default function PaginaCliente(props: PageProps<'/clientes/[id]'>) {
 }
 
 async function Conteudo({ params, searchParams }: PageProps<'/clientes/[id]'>) {
+    await exigirUsuario();
     const id = Number((await params).id);
     const tudo = (await searchParams).tudo === '1';
     const cliente = await dados.cliente(id);
@@ -43,7 +47,7 @@ async function Conteudo({ params, searchParams }: PageProps<'/clientes/[id]'>) {
     const agora = new Date();
     const historico: ItemHistorico[] = hist.itens.map((h) =>
         h.tipo === 'item'
-            ? { tipo: 'item', id: h.id, nome: h.nome, cor: h.cor, qtd: h.qtd, preco: h.preco, quando: quando(h.em, agora) }
+            ? { tipo: 'item', id: h.id, nome: h.nome, cor: h.cor, qtd: h.qtd, preco: h.preco, quando: quando(h.em, agora), por: h.por }
             : {
                   tipo: 'pagamento',
                   id: h.id,
@@ -52,6 +56,8 @@ async function Conteudo({ params, searchParams }: PageProps<'/clientes/[id]'>) {
                   estornado: h.estornado_em !== null,
                   motivo: h.motivo_estorno,
                   quando: quando(h.em, agora),
+                  por: h.por,
+                  estornadoPor: h.estornado_por,
               },
     );
 

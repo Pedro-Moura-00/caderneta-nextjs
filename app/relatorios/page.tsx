@@ -5,6 +5,7 @@ import { Suspense } from 'react';
 import { Icone, type NomeIcone } from '@/components/Icone';
 import { CabecalhoPagina, EstadoVazio, Pagina } from '@/components/ui';
 import { FORMAS } from '@/lib/config';
+import { exigirUsuario } from '@/lib/auth';
 import * as dados from '@/lib/dados';
 import { brl, corCss, diaDe } from '@/lib/formato';
 import { lerPeriodo, rotuloPeriodo } from './periodo';
@@ -36,6 +37,7 @@ export default function Relatorios({ searchParams }: PageProps<'/relatorios'>) {
 const barra = (valor: number, maximo: number) => Math.max(3, maximo > 0 ? (valor / maximo) * 100 : 0);
 
 async function Conteudo({ searchParams }: Pick<PageProps<'/relatorios'>, 'searchParams'>) {
+    await exigirUsuario();
     const sp = await searchParams;
     await connection();
     const hoje = diaDe(new Date());

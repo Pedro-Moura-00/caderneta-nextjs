@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { usuarioAtual } from '@/lib/auth';
 import { rotuloForma } from '@/lib/config';
 import { linhasExportacao } from '@/lib/dados';
 import { diaDe, horaDe } from '@/lib/formato';
@@ -13,10 +14,11 @@ const num = (v: number | null) => (v === null ? '' : v.toFixed(2).replace('.', '
 
 /** Planilha CSV do período (separador ";", decimais com vírgula, BOM para o Excel ler acentos). */
 export async function GET(req: NextRequest) {
+    if (!(await usuarioAtual())) return new Response('Entre na Caderneta para exportar.', { status: 401 });
     const q = req.nextUrl.searchParams;
     const { de, ate } = lerPeriodo({ p: q.get('p'), de: q.get('de'), ate: q.get('ate') }, diaDe(new Date()));
 
-    const linhas = [['Data', 'Hora', 'Tipo', 'Cliente', 'Descrição', 'Categoria', 'Qtd', 'Preço unitário', 'Valor', 'Forma', 'Situação']];
+    const linhas = [['Data', 'Hora', 'Tipo', 'Cliente', 'Descrição', 'Categoria', 'Qtd', 'Preço unitário', 'Valor', 'Forma', 'Situação', 'Usuário']];
     for (const l of await linhasExportacao(de, ate)) {
         const dia = diaDe(l.data_hora);
         linhas.push([
@@ -31,6 +33,7 @@ export async function GET(req: NextRequest) {
             num(l.valor),
             l.forma ? rotuloForma(l.forma) : '',
             l.situacao,
+            l.usuario ?? '',
         ]);
     }
     const csv = '﻿' + linhas.map((l) => l.map(campo).join(';')).join('\n') + '\n';

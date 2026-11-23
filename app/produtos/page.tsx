@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { CabecalhoPagina, Pagina } from '@/components/ui';
+import { exigirUsuario } from '@/lib/auth';
 import * as dados from '@/lib/dados';
 import { Catalogo } from './catalogo';
 
@@ -19,6 +20,7 @@ export default function Produtos() {
 }
 
 async function Conteudo() {
+    await exigirUsuario();
     const [categorias, produtos] = await Promise.all([dados.categorias(), dados.produtos()]);
     return <Catalogo categorias={categorias} produtos={produtos} />;
 }
